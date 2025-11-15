@@ -1,0 +1,57 @@
+name: Deploy Laravel 12 ke InfinityFree (Windows)
+
+on:
+  push:
+    branches:
+      - main  # atau branch yang kamu pakai
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'  # ganti sesuai versi Laravel / kebutuhan
+          extensions: mbstring, pdo_mysql, intl, zip
+          ini-values: post_max_size=256M, upload_max_filesize=256M
+
+      - name: Install Composer dependencies
+        run: |
+          composer install --no-dev --optimize-autoloader
+
+      - name: Generate Laravel key & config
+        run: |
+          if not exist .env (copy .env.example .env)
+          php artisan key:generate
+          php artisan config:cache
+
+      - name: Build frontend (jika ada)
+        run: |
+          # contoh untuk npm / vite, sesuaikan kalau kamu pakai
+          npm install
+          npm run build
+
+      - name: Prepare files untuk FTP upload
+        run: |
+          mkdir upload
+          REM Copy semua file kecuali folder yang mau di-ignore
+          xcopy . upload /E /H /C /I /Y
+
+      - name: FTP Deploy ke InfinityFree
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}           # misal ftpupload.net
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: upload
+          server-dir: /htdocs                      # folder target di InfinityFree
+
+      - name: Cleanup cache (opsional)
+        run: |
+          php artisan route:cache
+          php artisan view:cache
